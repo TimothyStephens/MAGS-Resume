@@ -1,0 +1,31 @@
+# Configuration for MAGS-Resume Studio
+
+api_keys:
+  openai: "sk-..."       # Required for OpenAI models
+  anthropic: "sk-ant-..." # Required for Anthropic models
+  gemini: "..."          # Required for Google models (Note: key name is 'gemini')
+  mistral: "..."         # Optional
+  cohere: "..."          # Optional
+
+models:
+  # The workflow configuration
+  build_workflow:
+    # The primary writer agent that generates/edits the resume
+    writer:
+      provider: "openai"
+      model: "gpt-4o"
+    
+    # A list of reviewer agents that provide feedback in parallel
+    reviewers:
+      - provider: "anthropic"
+        model: "claude-3-5-sonnet-20240620"
+      - provider: "google"
+        model: "gemini-1.5-pro"
+      # You can add more reviewers here
+
+  # Configuration for interactive features (CLI chat, UI Q&A)
+  interactive_commands:
+    # The assistant for the "Application Q&A" tab
+    chat:
+      provider: "openai"
+      model: "gpt-4o"

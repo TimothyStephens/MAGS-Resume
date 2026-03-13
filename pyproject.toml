@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mags-resume"
+version = "0.1.0"
+description = "Multi-Agent Graph System for Resume Customization"
+#authors = [
+#    { name = "Timothy Stephens", email = "TBD" }
+#]
+#readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # Core CLI & Formatting
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    
+    # LangChain / Multi-Agent Stack
+    "langgraph>=0.1.0",
+    "langchain-core>=0.1.50",
+    "langchain-openai>=0.1.0",
+    "langchain-google-genai>=1.0.0",
+    "google-generativeai>=0.5.0",
+    "langchain-community>=0.2.0",
+    "langchain-anthropic>=0.1.0",
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
+    
+    # Configuration Parsing
+    "pyyaml>=6.0.1",
+    "pydantic>=2.5.0",
+    
+    # NEW: Document Processing
+    "python-docx>=1.1.0",
+    "markdown>=3.6",
+    "beautifulsoup4>=4.12.3",
+    
+    # NEW: Web UI & Diffing Tools
+    "streamlit>=1.32.0",
+    "st-diff-viewer>=1.0.0"
+]
+[project.scripts]
+mags-resume = "mags_resume.cli:app"
