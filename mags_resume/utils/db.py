@@ -3,6 +3,7 @@ import hashlib
 import json
 import pprint
 import os
+import threading
 from mags_resume.utils.logger import logger
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
@@ -10,77 +11,86 @@ from langchain_core.outputs import LLMResult
 DB_DIR = ".MAGS-Resume"
 DB_PATH = os.path.join(DB_DIR, "cache.db")
 
+# Global lock to prevent SQLite threading violations causing crashes
+_db_lock = threading.Lock()
+
 def init_db():
     os.makedirs(DB_DIR, exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS completed_functions (
-                func_hash TEXT PRIMARY KEY,
-                function_name TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS token_usage (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                role TEXT,
-                model TEXT,
-                in_tokens INTEGER,
-                out_tokens INTEGER,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS module_iterations (
-                location TEXT PRIMARY KEY,
-                total_iterations INTEGER DEFAULT 0
-            )
-        """)
-        conn.commit()
+    with _db_lock:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS completed_functions (
+                    func_hash TEXT PRIMARY KEY,
+                    function_name TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS token_usage (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    role TEXT,
+                    model TEXT,
+                    in_tokens INTEGER,
+                    out_tokens INTEGER,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS module_iterations (
+                    location TEXT PRIMARY KEY,
+                    total_iterations INTEGER DEFAULT 0
+                )
+            """)
+            conn.commit()
 
 def hash_spec(spec: dict) -> str:
     return hashlib.sha256(json.dumps(spec, sort_keys=True).encode()).hexdigest()
 
 def is_function_built(spec: dict) -> bool:
     spec_hash = hash_spec(spec)
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM completed_functions WHERE func_hash = ?", (spec_hash,))
-        return cursor.fetchone() is not None
+    with _db_lock:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM completed_functions WHERE func_hash = ?", (spec_hash,))
+            return cursor.fetchone() is not None
 
 def mark_function_built(function_name: str, spec: dict):
     spec_hash = hash_spec(spec)
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO completed_functions (func_hash, function_name) VALUES (?, ?)", 
-                       (spec_hash, function_name))
-        conn.commit()
+    with _db_lock:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR IGNORE INTO completed_functions (func_hash, function_name) VALUES (?, ?)", 
+                           (spec_hash, function_name))
+            conn.commit()
 
 def add_iterations_to_module(location: str, count: int):
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO module_iterations (location, total_iterations) VALUES (?, 0)", (location,))
-        cursor.execute("UPDATE module_iterations SET total_iterations = total_iterations + ? WHERE location = ?", (count, location))
-        conn.commit()
+    with _db_lock:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR IGNORE INTO module_iterations (location, total_iterations) VALUES (?, 0)", (location,))
+            cursor.execute("UPDATE module_iterations SET total_iterations = total_iterations + ? WHERE location = ?", (count, location))
+            conn.commit()
 
 def get_total_iterations(location: str) -> int:
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT total_iterations FROM module_iterations WHERE location = ?", (location,))
-        row = cursor.fetchone()
-        return row[0] if row else 0
+    with _db_lock:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT total_iterations FROM module_iterations WHERE location = ?", (location,))
+            row = cursor.fetchone()
+            return row[0] if row else 0
 
 def log_token_usage(role: str, model: str, in_tokens: int, out_tokens: int):
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO token_usage (role, model, in_tokens, out_tokens) VALUES (?, ?, ?, ?)",
-                       (role, model, in_tokens, out_tokens))
-        conn.commit()
+    with _db_lock:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO token_usage (role, model, in_tokens, out_tokens) VALUES (?, ?, ?, ?)",
+                           (role, model, in_tokens, out_tokens))
+            conn.commit()
 
 def get_token_summary():
     """Queries the database for aggregated token usage statistics."""
-    with sqlite3.connect(DB_PATH) as conn:
+    with _db_lock, sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         # Get per-role summary
         cursor.execute("""

@@ -2,16 +2,21 @@ import streamlit as st
 import tempfile
 import os
 import json
+import threading
 from st_diff_viewer import diff_viewer
 from pathlib import Path
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.callbacks import BaseCallbackHandler
+from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 # Import from our backend
 from mags_resume.utils.doc_ops import extract_text_from_docx, save_text_to_docx
-from mags_resume.utils.config_parser import get_llm
+from mags_resume.utils.config_parser import get_llm, register_callback_factory, clear_callback_factories
 from mags_resume.graph import build_career_graph
+from mags_resume.utils.db import init_db
 
 st.set_page_config(layout="wide", page_title="MAGS-CareerDev Studio")
+init_db()
 st.title("MAGS-CareerDev: Resume Studio")
 
 # --- Application Manager Sidebar ---
@@ -127,6 +132,24 @@ with tab_ai:
     if submitted and not is_ready:
         st.warning("Please upload a resume and paste a job description to proceed.")
 
+    class StatusCallbackHandler(BaseCallbackHandler):
+        def __init__(self, status_container, role, model_name, lock=None):
+            self.status = status_container
+            self.role = role or "Agent"
+            self.model_name = model_name
+            self.ctx = get_script_run_ctx()
+            self.lock = lock or threading.Lock()
+        
+        def on_llm_start(self, serialized, prompts, **kwargs):
+            if self.ctx:
+                add_script_run_ctx(ctx=self.ctx)
+                
+            msg = f"**{self.role.replace('_', ' ').title()}** is thinking..."
+            
+            with self.lock:
+                self.status.write(msg)
+                self.status.update(label=msg, state="running")
+
     if submitted and is_ready:
         # Auto-save Job Ad if workspace is active
         if 'app_dir' in st.session_state:
@@ -134,7 +157,7 @@ with tab_ai:
             ad_path.write_text(job_ad, encoding="utf-8")
             st.toast(f"Saved Job Description to {ad_path.name}")
 
-        with st.spinner("AI Agents are optimizing your resume... (This may take a minute)"):
+        with st.status("Initializing AI Agents...", expanded=True) as status:
             # Determine source
             if resume_file:
                 file_payload = resume_file
@@ -173,14 +196,26 @@ with tab_ai:
                 "task_type": "resume",
                 "config_path": "config.yaml"
             }
+
+            # Shared lock for UI updates in this run to prevent concurrency crashes
+            ui_lock = threading.Lock()
+
+            # Register UI callback for status updates
+            def status_factory(role, model_name):
+                return StatusCallbackHandler(status, role, model_name, lock=ui_lock)
             
-            final_state = graph.invoke(initial_state)
-            
-            st.session_state['original'] = original_text
-            st.session_state['draft'] = final_state['current_draft']
-            st.session_state['editor'] = final_state['current_draft']
-            if tmp_path:
-                os.remove(tmp_path)
+            register_callback_factory(status_factory)
+            try:
+                final_state = graph.invoke(initial_state)
+                status.update(label="Workflow Complete!", state="complete", expanded=False)
+                
+                st.session_state['original'] = original_text
+                st.session_state['draft'] = final_state['current_draft']
+                st.session_state['editor'] = final_state['current_draft']
+            finally:
+                if tmp_path: os.remove(tmp_path)
+                clear_callback_factories()
+
             st.success("AI draft generated! Scroll down to review and edit.")
             
             # AUTO-SAVE: Initial Draft

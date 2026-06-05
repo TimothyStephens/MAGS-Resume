@@ -1,6 +1,7 @@
 import os
 import yaml
 import json
+import contextvars
 from pathlib import Path
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
@@ -16,6 +17,22 @@ except ImportError:
 
 from mags_resume.utils.db import TokenLoggingCallbackHandler, LoggingCallbackHandler
 from mags_resume.utils.logger import logger
+
+# Context-local storage for injecting callbacks (e.g. for UI status updates)
+_callback_factories_var = contextvars.ContextVar("callback_factories", default=None)
+
+def register_callback_factory(factory):
+    """Registers a factory function that returns a CallbackHandler given (role, model_name)."""
+    current = _callback_factories_var.get()
+    if current is None:
+        current = []
+    # Create a new list to avoid mutating shared state if any
+    new_list = current + [factory]
+    _callback_factories_var.set(new_list)
+
+def clear_callback_factories():
+    """Clears registered callback factories for the current context."""
+    _callback_factories_var.set([])
 
 def ensure_config_structure(config: dict) -> dict:
     """Ensures the config dictionary has the modern structure, migrating if necessary."""
@@ -154,6 +171,17 @@ def _create_llm_instance(model_config: dict, api_keys: dict, role: str = None):
         # If debug mode is on, add a verbose logger for LLM I/O
         if os.getenv("MAGS_DEBUG"):
             callbacks.append(LoggingCallbackHandler(logger))
+
+        # Inject any context-registered callbacks (e.g. UI status updaters)
+        factories = _callback_factories_var.get()
+        if factories:
+            for factory in factories:
+                try:
+                    cb = factory(role=role, model_name=model_name)
+                    if cb:
+                        callbacks.append(cb)
+                except Exception as e:
+                    logger.warning(f"Error creating callback from factory: {e}")
 
         llm.callbacks = callbacks
         

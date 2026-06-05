@@ -1,0 +1,9 @@
+## Optimization Instructions
+ - Targeted Headline Only: Change the professional title (e.g., "Lead Data Scientist" ) to match the exact title in the job ad. Do not alter the rest of the contact header.
+ - Skill-Section Harvesting: Use the SKILLS AND EXPERTISE section  as the primary "keyword bucket." Update the terms there to match the ad’s literal strings (e.g., if the ad says "MLOps" and you have "Model Lifecycle Management", list both or swap them).
+ - Mirroring, Not Rewriting: For the PROFESSIONAL EXPERIENCE section, do not rewrite the bullets. Instead, swap 1–2 verbs or nouns in existing bullets to mirror the job ad's language (e.g., changing "architected"  to "designed" if the ad uses "design" repeatedly).
+ - Preserve Narrative Flow: Maintain the original sentence structure and "story" of each achievement. Do not add new bullets or remove existing ones unless they are completely irrelevant to the target role.
+ - Keyword Cap: Limit keyword additions to 10–15 high-priority terms from the job ad. This prevents the "keyword-stuffing" feel while still triggering search filters.
+ - Integrity Guardrail: Only swap terms if they are technically accurate to your experience. Do not add tools (e.g., "Snowflake" ) unless you have the "familiarity" or "experience" already noted in your draft.
+ - Strict Formatting Lock: Do not move sections, change font styles, or alter the Markdown hierarchy. The output should look identical to the input, with only minor text-string updates.
+ - Spacing Adherence: Strictly adhere to the vertical spacing and indentation of the master resume. If the original has blank lines between specific items or sections, preserve them in the output.
