@@ -1,6 +1,8 @@
 import typer
 import subprocess
 import os
+import secrets
+import socket
 from typing import Optional
 from pathlib import Path
 from rich.console import Console
@@ -22,9 +24,24 @@ def format_llm_error(e: Exception) -> str:
     """Helper to format exception messages for table display."""
     return str(e).split('\n')[0][:100]
 
+def get_internal_ip() -> str:
+    """Retrieve the internal network IP address of the host."""
+    try:
+        # We create a dummy socket to determine the primary interface IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
 @app.command()
 def studio(
-    debug: bool = typer.Option(False, "--debug", help="Enable debug logging of agent communications.")
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging of agent communications."),
+    port: int = typer.Option(8501, "--port", "-p", help="Port to run the Streamlit server on."),
+    ip: Optional[str] = typer.Option(None, "--ip", help="IP address to bind the Streamlit server to."),
+    token: Optional[str] = typer.Option(None, "--token", help="Security token for accessing the Streamlit UI. A random one is generated if not provided.")
 ):
     """ 
     Launch the side-by-side Streamlit Web UI.
@@ -37,8 +54,28 @@ def studio(
 
     # Locates ui.py in the package and runs it with streamlit
     ui_path = Path(__file__).parent / "ui.py"
-    console.print(Panel("[bold green]Starting MAGS-Resume Studio...[/bold green]\n\nAccess the UI at [underline]http://localhost:8501[/underline]", expand=False))
-    subprocess.run(["streamlit", "run", str(ui_path)])
+    
+    if token is None:
+        token = secrets.token_urlsafe(16) # Generate a secure random token
+
+    os.environ["MAGS_STREAMLIT_TOKEN"] = token # Pass token via environment variable
+    display_host = ip if ip else "localhost"
+    network_ip = get_internal_ip()
+
+    console.print(Panel(
+        f"[bold green]You can now view your Streamlit app in your browser.[/bold green]\n\n"
+        f"  Local URL:   [underline]http://{display_host}:{port}/?token={token}[/underline]\n"
+        f"  Network URL: [underline]http://{network_ip}:{port}/?token={token}[/underline]\n\n"
+        f"[yellow]Note: The security token is required for access.[/yellow]",
+        title="MAGS-Resume Studio",
+        expand=False
+    ))
+    
+    cmd = ["streamlit", "run", str(ui_path), "--server.port", str(port), "--server.headless", "true"]
+    if ip:
+        cmd.extend(["--server.address", ip])
+        
+    subprocess.run(cmd)
 
 @app.command()
 def tokens():

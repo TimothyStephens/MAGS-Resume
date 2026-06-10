@@ -1,0 +1,41 @@
+Bootstrap: docker
+From: mambaorg/micromamba:1.5.8
+
+%labels
+    Author Timothy Stephens
+    Version 1.0
+    Description Apptainer container for MAGS-Resume Studio
+
+%files
+    /home/vmuser/repos/MAGS-Resume/environment.yml /opt/environment.yml
+    /home/vmuser/repos/MAGS-Resume /opt/MAGS-Resume
+
+%post
+    # Create the environment using micromamba
+    # We use -n mags-resume to match the name in the yaml
+    micromamba create -y -n mags-resume -f /opt/environment.yml
+    
+    # Activate environment for the install step
+    export PATH="/opt/conda/envs/mags-resume/bin:$PATH"
+    
+    # Install the MAGS-Resume package
+    # This assumes a pyproject.toml or setup.py exists in the root
+    cd /opt/MAGS-Resume
+    if [ -f pyproject.toml ] || [ -f setup.py ]; then
+        pip install .
+    else
+        # Fallback if no installer is found: add to path manually in %environment
+        echo "No setup.py or pyproject.toml found. Project will be added to PYTHONPATH."
+    fi
+
+    micromamba clean --all --yes
+
+%environment
+    export PATH="/opt/conda/envs/mags-resume/bin:$PATH"
+    export PYTHONPATH="/opt/MAGS-Resume:$PYTHONPATH"
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+
+%runscript
+    # Default behavior: pass arguments to the mags-resume CLI
+    exec mags-resume "$@"

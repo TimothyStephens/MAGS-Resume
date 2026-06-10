@@ -19,6 +19,20 @@ st.set_page_config(layout="wide", page_title="MAGS-CareerDev Studio")
 init_db()
 st.title("MAGS-CareerDev: Resume Studio")
 
+# --- Token Validation ---
+expected_token = os.environ.get("MAGS_STREAMLIT_TOKEN")
+query_token = st.query_params.get("token")
+
+if expected_token: # Only enforce if a token was set by the CLI
+    if not query_token or query_token != expected_token:
+        st.error("Unauthorized Access: Please use the full URL with the correct token provided by the CLI.")
+        st.stop()
+    else:
+        # Clear the token from query params to keep the URL clean after validation
+        # This also prevents the token from being accidentally shared if the user copies the URL
+        st.query_params.pop("token", None)
+
+
 # --- Application Manager Sidebar ---
 with st.sidebar:
     st.header("📂 Application Workspace")

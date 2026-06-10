@@ -211,3 +211,6 @@ __marimo__/
 *.sqlite3
 .MAGS-Resume
 config.yaml
+
+# Custome
+*.sif
